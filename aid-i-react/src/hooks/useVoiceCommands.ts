@@ -41,50 +41,67 @@ export function useVoiceCommands() {
       w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) return;
 
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
-
-    // Tracks whether this effect instance is still alive.
-    // Set to false in cleanup so the onend restart doesn't fire after unmount
-    // or React StrictMode's double-invocation of effects.
+    // Only set to false on unmount / StrictMode cleanup — never on permission
+    // errors, so recognition recovers automatically once the user grants mic
+    // access (e.g. via the recorder) without needing a page reload.
     let active = true;
+    let rec: SpeechRecognition | null = null;
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      let txt = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        txt += e.results[i][0].transcript;
-      }
-      checkVoiceCommands(txt.toLowerCase());
-    };
+    function boot() {
+      if (!active) return;
+      rec = new SR();
+      const r = rec;
 
-    rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        active = false;
-        setVcListening(false);
-      } else if (e.error !== 'no-speech') {
-        console.warn('cmd rec error:', e.error);
-      }
-    };
+      r.continuous = true;
+      r.interimResults = true;
+      r.lang = 'en-US';
 
-    // Chrome throws InvalidStateError if rec.start() is called synchronously
-    // inside onend — a small delay lets the engine fully reset first.
-    rec.onend = () => {
-      setTimeout(() => {
-        if (!active) return;
-        try { rec.start(); } catch (_) { /* ignore */ }
-      }, 150);
-    };
+      r.onresult = (e: SpeechRecognitionEvent) => {
+        let txt = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          txt += e.results[i][0].transcript;
+        }
+        checkVoiceCommands(txt.toLowerCase());
+      };
 
-    try {
-      rec.start();
-      setVcListening(true);
-    } catch (_) { /* ignore */ }
+      r.onerror = (e: SpeechRecognitionErrorEvent) => {
+        if (e.error === 'not-allowed') {
+          // Don't kill active — retry on next onend so voice commands
+          // automatically recover once the user grants mic permission.
+          setVcListening(false);
+        } else if (e.error === 'service-not-allowed') {
+          // Service genuinely unavailable — stop trying.
+          active = false;
+          setVcListening(false);
+        } else if (e.error !== 'no-speech') {
+          console.warn('cmd rec error:', e.error);
+        }
+      };
+
+      // Chrome throws InvalidStateError if start() is called synchronously
+      // inside onend — 300 ms lets the engine fully reset first.
+      r.onend = () => {
+        setTimeout(() => {
+          if (!active) return;
+          try { r.start(); } catch (_) { /* ignore */ }
+        }, 300);
+      };
+
+      try {
+        r.start();
+        setVcListening(true);
+      } catch (_) { /* ignore */ }
+    }
+
+    // Delay first start so the page settles and avoids a permission
+    // prompt firing before the user has interacted with anything.
+    const t = setTimeout(boot, 800);
 
     return () => {
       active = false;
-      try { rec.stop(); } catch (_) { /* ignore */ }
+      clearTimeout(t);
+      try { rec?.stop(); } catch (_) { /* ignore */ }
+      rec = null;
     };
   }, [checkVoiceCommands, setVcListening]);
 
