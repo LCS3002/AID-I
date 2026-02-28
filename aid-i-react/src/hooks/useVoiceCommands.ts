@@ -47,10 +47,13 @@ export function useVoiceCommands() {
     let active = true;
     let rec: SpeechRecognition | null = null;
 
-    function boot() {
+    // Create a fresh SpeechRecognition instance each time — reusing the same
+    // instance after Chrome aborts it causes repeated immediate aborts.
+    function spawn() {
       if (!active) return;
-      rec = new SR();
-      const r = rec;
+
+      const r = new SR();
+      rec = r;
 
       r.continuous = true;
       r.interimResults = true;
@@ -66,25 +69,21 @@ export function useVoiceCommands() {
 
       r.onerror = (e: SpeechRecognitionErrorEvent) => {
         if (e.error === 'not-allowed') {
-          // Don't kill active — retry on next onend so voice commands
-          // automatically recover once the user grants mic permission.
           setVcListening(false);
+          // Keep active=true so onend still triggers a retry — recovers
+          // automatically once mic permission is granted.
         } else if (e.error === 'service-not-allowed') {
-          // Service genuinely unavailable — stop trying.
           active = false;
           setVcListening(false);
-        } else if (e.error !== 'no-speech') {
-          console.warn('cmd rec error:', e.error);
         }
+        // 'aborted' and 'no-speech' are normal Chrome continuous-mode
+        // lifecycle events — onend will spawn a fresh instance.
       };
 
-      // Chrome throws InvalidStateError if start() is called synchronously
-      // inside onend — 300 ms lets the engine fully reset first.
+      // Always spawn a NEW instance on end — avoids Chrome's behaviour of
+      // immediately aborting a restarted instance.
       r.onend = () => {
-        setTimeout(() => {
-          if (!active) return;
-          try { r.start(); } catch (_) { /* ignore */ }
-        }, 300);
+        setTimeout(spawn, 500);
       };
 
       try {
@@ -95,7 +94,7 @@ export function useVoiceCommands() {
 
     // Delay first start so the page settles and avoids a permission
     // prompt firing before the user has interacted with anything.
-    const t = setTimeout(boot, 800);
+    const t = setTimeout(spawn, 800);
 
     return () => {
       active = false;
