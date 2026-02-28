@@ -27,7 +27,6 @@ export function useVoiceCommands() {
         if (text.includes(phrase)) {
           ctx.showCmdToast(phrase);
           cmd.action(ctx);
-          lastCmdTextRef.current = ''; // reset so the same command can fire again
           return;
         }
       }
@@ -52,6 +51,7 @@ export function useVoiceCommands() {
     // instance after Chrome aborts it causes repeated immediate aborts.
     function spawn() {
       if (!active) return;
+      lastCmdTextRef.current = ''; // fresh session — allow same command again
 
       const r = new RecClass();
       rec = r;
