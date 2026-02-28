@@ -9,7 +9,7 @@ export function useVoiceCommands() {
     setVcListening, showCmdToast, resources,
   } = useAppContext();
 
-  const lastCmdTextRef = useRef('');
+  const lastCmdTimeRef = useRef(0);
 
   // Keep current context values in refs so the stable checkVoiceCommands
   // always sees fresh values without re-registering the cmdRec listener.
@@ -17,14 +17,15 @@ export function useVoiceCommands() {
   ctxRef.current = { navigate, openModal, aedIdx, setAedIdx, setPendingAction, activeView, showCmdToast, resources };
 
   const checkVoiceCommands = useCallback((text: string) => {
-    if (text === lastCmdTextRef.current) return;
-    lastCmdTextRef.current = text;
+    const now = Date.now();
+    if (now - lastCmdTimeRef.current < 2000) return;
 
     const ctx = { ...ctxRef.current };
 
     for (const cmd of COMMANDS) {
       for (const phrase of cmd.phrases) {
         if (text.includes(phrase)) {
+          lastCmdTimeRef.current = now;
           ctx.showCmdToast(phrase);
           cmd.action(ctx);
           return;
@@ -51,7 +52,6 @@ export function useVoiceCommands() {
     // instance after Chrome aborts it causes repeated immediate aborts.
     function spawn() {
       if (!active) return;
-      lastCmdTextRef.current = ''; // fresh session — allow same command again
 
       const r = new RecClass();
       rec = r;
@@ -61,11 +61,8 @@ export function useVoiceCommands() {
       r.lang = 'en-US';
 
       r.onresult = (e: SpeechRecognitionEvent) => {
-        let txt = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          txt += e.results[i][0].transcript;
-        }
-        checkVoiceCommands(txt.toLowerCase());
+        const txt = e.results[e.results.length - 1][0].transcript.toLowerCase();
+        checkVoiceCommands(txt);
       };
 
       r.onerror = (e: SpeechRecognitionErrorEvent) => {
