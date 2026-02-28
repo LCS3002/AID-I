@@ -40,6 +40,7 @@ export function useVoiceCommands() {
     const SR: (new () => SpeechRecognition) | undefined =
       w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) return;
+    const RecClass = SR; // capture narrowed type so spawn() closure can use it
 
     // Only set to false on unmount / StrictMode cleanup — never on permission
     // errors, so recognition recovers automatically once the user grants mic
@@ -52,7 +53,7 @@ export function useVoiceCommands() {
     function spawn() {
       if (!active) return;
 
-      const r = new SR();
+      const r = new RecClass();
       rec = r;
 
       r.continuous = true;
