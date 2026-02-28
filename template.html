@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AID-I — Emergency Response</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* ════════════════════════════════════════════════
+   DESIGN TOKENS — from logo + product overview
+════════════════════════════════════════════════ */
+:root{
+  --red:        #E8192C;
+  --red-dark:   #B0101F;
+  --red-glow:   rgba(232,25,44,0.15);
+  --off-white:  #F5F0EB;
+  --charcoal:   #1A1A1A;
+  /* Logo bg gradient colours */
+  --bg-center:  #2a1010;  /* warm dark red at core */
+  --bg-edge:    #0e0e0e;  /* near-black at edges */
+  --mid:        #3D3D3D;
+  --muted:      #7A7A7A;
+  --border:     rgba(232,25,44,0.2);
+  --bdim:       rgba(255,255,255,0.06);
+  --surf:       #0f0f0f;
+  --surf2:      #1a1a1a;
+  --surf3:      #232323;
+  /* Map: navy-dark from mockup */
+  --map-bg:     #090d14;
+  --map-grid:   rgba(60,80,120,0.18);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--charcoal);color:var(--off-white);font-family:'DM Sans',sans-serif;font-weight:300}
+
+/* ── noise (product overview) ── */
+body::after{content:'';position:fixed;inset:0;opacity:.035;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:200px;pointer-events:none;z-index:9999}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--mid);border-radius:2px}
+
+/* ════════════════════════════════════════════════
+   LAYOUT SHELL
+════════════════════════════════════════════════ */
+.app{display:flex;height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:58px;flex-shrink:0;
+  background:var(--surf);
+  border-right:1px solid var(--bdim);
+  display:flex;flex-direction:column;align-items:center;
+  padding:16px 0 18px;z-index:200;
+}
+
+/* ── LOGO from mockup: AID-I with red block ── */
+.logo-mark{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:20px;cursor:pointer;gap:0;
+  width:42px;overflow:hidden;border-radius:2px;
+}
+.logo-aid{
+  font-family:'Bebas Neue',cursive;
+  font-size:.95rem;letter-spacing:.12em;
+  color:var(--off-white);line-height:1;
+}
+/* red hyphen+I block from the mockup */
+.logo-i-block{
+  display:flex;align-items:center;gap:1px;height:14px;
+}
+.logo-dash{
+  width:8px;height:4px;
+  background:var(--red);border-radius:0;
+}
+.logo-i{
+  width:6px;height:14px;
+  background:var(--red);
+}
+
+.nav-group{display:flex;flex-direction:column;gap:4px;flex:1}
+
+.ni{
+  width:38px;height:38px;border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:16px;
+  border:1px solid transparent;
+  transition:all .2s;position:relative;
+}
+.ni:hover{background:rgba(232,25,44,.08);border-color:var(--border)}
+.ni.active{background:var(--red-glow);border-color:var(--border)}
+
+.ni-tip{
+  position:absolute;left:46px;
+  background:var(--surf3);border:1px solid var(--bdim);border-radius:2px;
+  padding:4px 9px;
+  font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--off-white);white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .15s;z-index:400;
+}
+.ni:hover .ni-tip{opacity:1}
+
+.nav-bot{display:flex;flex-direction:column;align-items:center;gap:8px}
+
+/* 911 button — large, matches btn-primary but circular feel */
+.btn-911{
+  width:38px;height:38px;border-radius:2px;
+  background:var(--red);border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;
+  box-shadow:0 0 22px rgba(232,25,44,.35);
+  animation:pulse911 3s infinite;transition:all .2s;
+}
+.btn-911:hover{background:var(--red-dark);transform:translateY(-1px);box-shadow:0 6px 28px rgba(232,25,44,.55)}
+@keyframes pulse911{0%,100%{box-shadow:0 0 18px rgba(232,25,44,.3)}50%{box-shadow:0 0 34px rgba(232,25,44,.58)}}
+
+/* ── MAIN AREA ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;height:100%;min-height:0}
+
+/* ── TOPBAR ── */
+.topbar{
+  height:50px;flex-shrink:0;
+  background:rgba(10,10,10,.97);
+  border-bottom:1px solid var(--bdim);
+  display:flex;align-items:center;padding:0 22px;gap:14px;
+  z-index:100;
+}
+.tb-title{
+  font-family:'Bebas Neue',cursive;
+  font-size:1.35rem;letter-spacing:.08em;color:var(--off-white);
+}
+.live-badge{
+  display:flex;align-items:center;gap:6px;
+  font-family:'Space Mono',monospace;
+  font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--red);
+  border:1px solid var(--border);padding:3px 9px;border-radius:100px;
+}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);animation:blink 1.5s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* voice command indicator in topbar */
+.vc-indicator{
+  display:flex;align-items:center;gap:6px;
+  font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--bdim);padding:3px 9px;border-radius:100px;
+  transition:all .3s;
+}
+.vc-indicator.listening{color:var(--red);border-color:var(--border)}
+.vc-indicator.listening .vc-dot{background:var(--red);animation:blink .8s infinite}
+.vc-dot{width:5px;height:5px;border-radius:50%;background:var(--muted)}
+
+.tb-spacer{flex:1}
+
+/* btn-primary — product overview exact */
+.btn-primary{
+  background:var(--red);color:white;
+  font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;
+  border:none;padding:.55rem 1.3rem;cursor:pointer;border-radius:2px;
+  transition:all .2s;display:inline-flex;align-items:center;gap:6px;
+}
+.btn-primary:hover{background:var(--red-dark);transform:translateY(-1px);box-shadow:0 6px 22px rgba(232,25,44,.4)}
+
+.btn-secondary{
+  background:transparent;color:var(--off-white);
+  font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;
+  border:1px solid rgba(255,255,255,.18);padding:.55rem 1.3rem;cursor:pointer;border-radius:2px;
+  transition:all .2s;display:inline-flex;align-items:center;gap:6px;
+}
+.btn-secondary:hover{border-color:var(--red);color:var(--red)}
+.btn-secondary:disabled{opacity:.3;cursor:not-allowed}
+
+/* ── VIEWS ── */
+.view{flex:1;display:none;overflow:hidden;min-height:0}
+.view.active{display:flex}
+
+/* ════════════════════════════════════════════════
+   MAP VIEW
+════════════════════════════════════════════════ */
+#view-map{flex-direction:row;height:100%;min-height:0}
+
+/* Leaflet map — styled to match mockup */
+#map{flex:1;min-height:0;height:100%;background:var(--map-bg)}
+
+/* CartoDB dark + grid-dot pin style from mockup */
+.leaflet-control-zoom{border:1px solid var(--bdim)!important;border-radius:2px!important;box-shadow:none!important;overflow:hidden}
+.leaflet-control-zoom a{background:var(--surf)!important;color:var(--off-white)!important;border-bottom:1px solid var(--bdim)!important;width:28px!important;height:28px!important;line-height:28px!important;font-size:15px!important;transition:background .2s}
+.leaflet-control-zoom a:hover{background:var(--surf3)!important;color:var(--red)!important}
+.leaflet-control-attribution{display:none!important}
+.leaflet-popup-content-wrapper{background:var(--surf2)!important;border:1px solid var(--bdim)!important;border-radius:2px!important;box-shadow:0 8px 32px rgba(0,0,0,.7)!important;color:var(--off-white)!important}
+.leaflet-popup-tip{background:var(--surf2)!important}
+.leaflet-popup-close-button{color:var(--muted)!important}
+.leaflet-popup-content{margin:14px 16px!important}
+
+/* map pin — concentric circle dots from mockup */
+.mp-wrap{display:flex;flex-direction:column;align-items:center;cursor:pointer;position:relative}
+.mp-outer{
+  width:22px;height:22px;border-radius:50%;
+  border:1.5px solid currentColor;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.mp-inner{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.9}
+/* pulse ring */
+.mp-pulse{
+  position:absolute;inset:-6px;border-radius:50%;
+  border:1px solid currentColor;opacity:0;
+  animation:mpPulse 2.4s ease-out infinite;
+}
+@keyframes mpPulse{0%{transform:scale(.8);opacity:.7}100%{transform:scale(2.2);opacity:0}}
+
+/* user location dot */
+.user-loc{
+  width:12px;height:12px;border-radius:50%;
+  background:white;border:2px solid rgba(255,255,255,.4);
+  box-shadow:0 0 0 5px rgba(232,25,44,.15);
+}
+.user-loc::before{content:'';position:absolute;inset:-9px;border-radius:50%;border:1px solid rgba(232,25,44,.2);animation:uPulse 2.8s infinite}
+@keyframes uPulse{0%{transform:scale(.7);opacity:.8}100%{transform:scale(2.4);opacity:0}}
+
+/* ── RIGHT PANEL ── */
+.map-panel{
+  width:280px;flex-shrink:0;
+  background:var(--surf);border-left:1px solid var(--bdim);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.panel-hd{padding:16px 18px 12px;border-bottom:1px solid var(--bdim)}
+.panel-title{font-family:'Bebas Neue',cursive;font-size:1.4rem;letter-spacing:.05em;color:var(--off-white)}
+.panel-sub{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+
+/* filter tags — feature-tag from product overview */
+.filter-row{padding:9px 18px;display:flex;gap:5px;flex-wrap:wrap;border-bottom:1px solid var(--bdim)}
+.ftag{font-family:'Space Mono',monospace;font-size:.52rem;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;border-radius:2px;border:1px solid;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px;opacity:.38}
+.ftag.on{opacity:1}
+.ftag-dot{width:5px;height:5px;border-radius:50%}
+
+/* resource list */
+.res-list{flex:1;overflow-y:auto}
+.res-card{
+  padding:12px 18px;border-bottom:1px solid var(--bdim);
+  cursor:pointer;transition:background .2s;display:flex;gap:11px;align-items:flex-start;
+  position:relative;
+}
+.res-card::before{content:'';position:absolute;top:0;left:0;bottom:0;width:2px;background:var(--red);transform:scaleY(0);transition:transform .25s}
+.res-card:hover{background:rgba(255,255,255,.02)}
+.res-card.sel{background:rgba(232,25,44,.05)}
+.res-card.sel::before{transform:scaleY(1)}
+.res-card.hidden{display:none}
+
+.res-icon{width:32px;height:32px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px}
+.res-body{flex:1;min-width:0}
+.res-name{font-size:.8rem;font-weight:500;color:var(--off-white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.res-meta{display:flex;gap:6px;align-items:center}
+.res-dist{font-family:'Space Mono',monospace;font-size:.55rem;color:var(--muted)}
+.res-tag{font-family:'Space Mono',monospace;font-size:.48rem;letter-spacing:.1em;text-transform:uppercase;padding:2px 4px;border-radius:2px;border:1px solid}
+.res-btns{display:flex;gap:5px;margin-top:8px}
+.res-btn{font-family:'Space Mono',monospace;font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border-radius:2px;border:1px solid rgba(255,255,255,.12);background:var(--surf2);color:var(--off-white);cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:4px}
+.res-btn:hover{background:var(--surf3);border-color:rgba(255,255,255,.2)}
+.res-btn.red{background:var(--red);border-color:var(--red);box-shadow:0 2px 10px rgba(232,25,44,.25)}
+.res-btn.red:hover{background:var(--red-dark)}
+
+.loc-bar{padding:9px 18px;border-top:1px solid var(--border);background:rgba(232,25,44,.04);display:flex;align-items:center;gap:7px;flex-shrink:0}
+.loc-text{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.1em;color:rgba(245,240,235,.45);flex:1}
+.loc-text strong{color:var(--off-white)}
+
+/* ════════════════════════════════════════════════
+   AED GUIDE
+════════════════════════════════════════════════ */
+#view-aed{flex-direction:row}
+
+.aed-sidebar{width:192px;flex-shrink:0;background:var(--surf);border-right:1px solid var(--bdim);overflow-y:auto}
+.aed-sb-hd{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);padding:14px 16px;border-bottom:1px solid var(--bdim)}
+.aed-si{padding:11px 16px;border-bottom:1px solid var(--bdim);cursor:pointer;transition:background .2s;display:flex;gap:9px;align-items:flex-start}
+.aed-si:hover{background:rgba(255,255,255,.02)}
+.aed-si.active{background:rgba(232,25,44,.06)}
+.aed-si-n{font-family:'Bebas Neue',cursive;font-size:1.2rem;color:var(--muted);line-height:1;min-width:20px;margin-top:1px}
+.aed-si.active .aed-si-n{color:var(--red)}
+.aed-si.done .aed-si-n{color:#28CA41}
+.aed-si-l{font-size:.75rem;font-weight:500;color:rgba(245,240,235,.45);line-height:1.3}
+.aed-si.active .aed-si-l{color:var(--off-white)}
+
+.aed-main{
+  flex:1;display:flex;flex-direction:column;background:var(--charcoal);overflow:hidden;position:relative;
+}
+/* logo-inspired gradient background */
+.aed-main::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(45,8,8,.8) 0%,transparent 70%);
+  pointer-events:none;
+}
+
+.aed-prog{height:2px;background:rgba(255,255,255,.05);flex-shrink:0}
+.aed-prog-fill{height:100%;background:var(--red);transition:width .5s cubic-bezier(.4,0,.2,1);box-shadow:0 0 10px rgba(232,25,44,.5)}
+
+.aed-body{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 70px;position:relative;z-index:2;
+}
+
+/* hero-eyebrow */
+.step-ey{
+  font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--red);margin-bottom:24px;
+  display:flex;align-items:center;gap:10px;
+}
+.step-ey::before,.step-ey::after{content:'';width:28px;height:1px;background:var(--red);opacity:.5}
+
+.aed-em{font-size:80px;line-height:1;margin-bottom:24px;animation:epop .4s cubic-bezier(.34,1.56,.64,1)}
+@keyframes epop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* section-title */
+.aed-title{font-family:'Bebas Neue',cursive;font-size:3rem;letter-spacing:.05em;color:var(--off-white);margin-bottom:16px;line-height:1}
+
+/* section-body */
+.aed-desc{font-size:.95rem;font-weight:300;color:rgba(245,240,235,.58);line-height:1.8;max-width:420px;margin-bottom:24px}
+
+.voice-hint{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.15em;text-transform:uppercase;color:var(--red);
+  border:1px solid var(--border);padding:4px 11px;border-radius:2px;
+}
+
+.aed-foot{padding:18px 24px;border-top:1px solid var(--bdim);display:flex;gap:10px;background:var(--surf);flex-shrink:0}
+
+/* ════════════════════════════════════════════════
+   RECORDER VIEW — real Speech Recognition
+════════════════════════════════════════════════ */
+#view-recorder{flex-direction:row}
+
+.rec-left{
+  flex:1;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--charcoal);position:relative;
+}
+/* logo-inspired gradient */
+.rec-left::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 20%,rgba(45,8,8,.75) 0%,transparent 68%);
+  pointer-events:none;
+}
+
+.wave-wrap{
+  height:100px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  gap:2px;padding:0 28px;position:relative;z-index:2;
+}
+.wb{width:3px;border-radius:2px;background:var(--red);opacity:.7;transition:height .08s ease;flex-shrink:0}
+
+.rec-timer{
+  font-family:'Bebas Neue',cursive;font-size:4.5rem;letter-spacing:.1em;
+  color:var(--off-white);text-align:center;line-height:1;
+  position:relative;z-index:2;flex-shrink:0;
+}
+.rec-sub{
+  font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.25em;text-transform:uppercase;
+  color:var(--muted);text-align:center;margin-top:4px;margin-bottom:24px;
+  position:relative;z-index:2;flex-shrink:0;
+}
+
+/* mic permission warning */
+.mic-warn{
+  margin:0 24px;padding:10px 14px;
+  background:rgba(232,25,44,.06);border:1px solid var(--border);border-radius:2px;
+  font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--red);text-align:center;flex-shrink:0;position:relative;z-index:2;
+  display:none;
+}
+
+.rec-btns{
+  display:flex;gap:12px;align-items:center;justify-content:center;
+  padding:0 28px;position:relative;z-index:2;flex-shrink:0;
+}
+.rb{width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:19px;transition:all .2s}
+.rb.main{background:var(--red);box-shadow:0 4px 20px rgba(232,25,44,.4);animation:rPulse 2s infinite}
+.rb.main.on{background:#e05a00;animation:none;box-shadow:0 4px 20px rgba(224,90,0,.35)}
+@keyframes rPulse{0%,100%{box-shadow:0 4px 20px rgba(232,25,44,.4)}50%{box-shadow:0 4px 30px rgba(232,25,44,.72),0 0 0 8px rgba(232,25,44,.08)}}
+.rb.sec{background:var(--surf2);border:1px solid var(--bdim);color:var(--off-white)}
+.rb.sec:hover{background:var(--surf3)}
+
+/* generate card — feature-card hover from product overview */
+.gen-card{
+  margin:20px 24px 0;padding:16px 18px;
+  background:var(--surf);border:1px solid var(--border);border-radius:2px;
+  cursor:pointer;display:flex;align-items:center;gap:12px;
+  transition:background .3s;position:relative;overflow:hidden;flex-shrink:0;
+  position:relative;z-index:2;
+}
+.gen-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform .4s}
+.gen-card:hover{background:#1e1e1e}
+.gen-card:hover::before{transform:scaleX(1)}
+.gen-ic{font-size:20px}
+.gen-b{flex:1}
+.gen-t{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--red);margin-bottom:2px}
+.gen-s{font-size:.8rem;color:var(--muted)}
+.gen-ar{color:var(--muted);font-size:18px}
+
+/* transcript panel */
+.tp{
+  width:310px;flex-shrink:0;background:var(--surf);
+  border-left:1px solid var(--bdim);display:flex;flex-direction:column;overflow:hidden;
+}
+.tp-hd{padding:16px 18px 12px;border-bottom:1px solid var(--bdim)}
+.tp-title{font-family:'Bebas Neue',cursive;font-size:1.35rem;letter-spacing:.05em;color:var(--off-white);margin-bottom:4px}
+.tp-status{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px}
+.tp-scroll{flex:1;overflow-y:auto;padding:16px 18px}
+.tp-text{font-size:.85rem;font-weight:300;color:rgba(245,240,235,.68);line-height:1.85}
+.tp-cur{display:inline-block;width:2px;height:13px;background:var(--red);margin-left:2px;vertical-align:middle;animation:blink .9s infinite}
+
+/* ════════════════════════════════════════════════
+   REPORT VIEW
+════════════════════════════════════════════════ */
+#view-report{flex-direction:row}
+.rpt-scroll{flex:1;overflow-y:auto;padding:28px}
+.rpt-inner{max-width:800px;margin:0 auto}
+
+/* protocol-block from product overview */
+.rpt-sum{
+  background:var(--surf);border:1px solid rgba(255,255,255,.07);
+  border-left:3px solid var(--red);border-radius:2px;
+  padding:20px 22px;margin-bottom:18px;position:relative;overflow:hidden;
+}
+.rpt-sum::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 70% 80%,rgba(232,25,44,.06) 0%,transparent 60%);pointer-events:none}
+.rpt-sum-lbl{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--red);margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.rpt-sum-txt{font-size:.9rem;font-weight:300;color:rgba(245,240,235,.7);line-height:1.75}
+
+.rpt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* protocol-item style from product overview */
+.rpt-card{background:var(--surf);border:1px solid rgba(255,255,255,.07);border-radius:2px;overflow:hidden}
+.rpt-ch{padding:12px 16px;border-bottom:1px solid var(--bdim);display:flex;align-items:center;gap:9px}
+.rpt-badge{font-family:'Bebas Neue',cursive;font-size:1.4rem;color:var(--red);background:rgba(232,25,44,.1);width:34px;height:34px;border-radius:2px;display:flex;align-items:center;justify-content:center}
+.rpt-ct{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--off-white)}
+.rpt-cs{font-size:.7rem;color:var(--muted);margin-top:1px}
+.rpt-row{padding:10px 16px;border-bottom:1px solid var(--bdim);display:flex;gap:10px}
+.rpt-row:last-child{border-bottom:none}
+.rpt-k{font-family:'Bebas Neue',cursive;font-size:1.25rem;color:var(--red);min-width:19px;line-height:1;margin-top:2px}
+.rpt-c{flex:1}
+.rpt-l{font-size:.7rem;font-weight:500;color:var(--off-white);margin-bottom:2px}
+.rpt-v{font-family:'Space Mono',monospace;font-size:.62rem;color:var(--muted);line-height:1.6}
+
+/* action panel */
+.rpt-act{width:210px;flex-shrink:0;background:var(--surf);border-left:1px solid var(--bdim);padding:20px 16px;display:flex;flex-direction:column;gap:9px}
+.rpt-al{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.rpt-ab{width:100%;padding:10px 12px;border-radius:2px;border:1px solid rgba(255,255,255,.1);background:var(--surf2);color:var(--off-white);cursor:pointer;transition:all .2s;font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.rpt-ab:hover{background:var(--surf3);border-color:rgba(255,255,255,.18)}
+.rpt-ab.red{background:var(--red);border-color:var(--red);box-shadow:0 2px 12px rgba(232,25,44,.28)}
+.rpt-ab.red:hover{background:var(--red-dark)}
+.rpt-div{height:1px;background:var(--bdim);margin:4px 0}
+.rpt-meta{font-size:.75rem;color:var(--muted);line-height:1.75}
+
+/* ════════════════════════════════════════════════
+   VOICE CONTROL (ElevenLabs concept panel)
+   — only transcribes / listens, no AI output
+════════════════════════════════════════════════ */
+#view-voice{flex-direction:column;overflow-y:auto;background:var(--charcoal)}
+.vc-wrap{max-width:860px;margin:0 auto;padding:44px 36px;width:100%}
+
+/* logo-inspired gradient header */
+.vc-header{
+  position:relative;overflow:hidden;border-radius:2px;
+  background:radial-gradient(ellipse 80% 120% at 50% -20%,#2a1010 0%,#0e0e0e 60%);
+  border:1px solid rgba(232,25,44,.15);
+  padding:36px 40px;margin-bottom:24px;
+  text-align:center;
+}
+/* eyebrow */
+.vc-ey{
+  font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--red);margin-bottom:18px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+}
+.vc-ey::before,.vc-ey::after{content:'';width:28px;height:1px;background:var(--red);opacity:.5}
+.vc-h-title{
+  font-family:'Bebas Neue',cursive;font-size:2.8rem;letter-spacing:.04em;
+  color:var(--off-white);line-height:1;margin-bottom:12px;
+}
+.vc-h-title span{color:var(--red)}
+.vc-h-body{font-size:.88rem;font-weight:300;color:rgba(245,240,235,.5);line-height:1.75;max-width:520px;margin:0 auto}
+
+/* how it works note */
+.vc-principle{
+  background:rgba(232,25,44,.05);border:1px solid var(--border);border-radius:2px;
+  padding:16px 20px;margin-bottom:20px;
+  font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.12em;color:rgba(245,240,235,.6);
+  line-height:1.75;
+}
+.vc-principle strong{color:var(--off-white);display:block;margin-bottom:6px;letter-spacing:.2em;font-size:.58rem;text-transform:uppercase;color:var(--red)}
+
+/* features-grid style */
+.vc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5px;background:rgba(255,255,255,.05);margin-bottom:1.5px}
+.vc-card{background:var(--charcoal);padding:24px;position:relative;overflow:hidden;transition:background .3s}
+.vc-card:hover{background:#1e1e1e}
+.vc-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform .4s}
+.vc-card:hover::before{transform:scaleX(1)}
+.vc-cn{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.2em;color:var(--red);opacity:.6;margin-bottom:8px}
+.vc-ct{font-family:'Bebas Neue',cursive;font-size:1.4rem;letter-spacing:.04em;color:var(--off-white);margin-bottom:7px;line-height:1.1}
+.vc-cb{font-size:.82rem;font-weight:300;color:rgba(245,240,235,.48);line-height:1.7}
+
+/* feature-tags */
+.vc-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+.vc-tag{font-family:'Space Mono',monospace;font-size:.5rem;letter-spacing:.12em;text-transform:uppercase;color:var(--red);border:1px solid rgba(232,25,44,.3);padding:2px 6px;border-radius:2px}
+
+/* flow */
+.vc-flow{background:var(--surf);border:1px solid rgba(255,255,255,.06);border-radius:2px;padding:24px;margin-top:1.5px}
+.vc-flow-hd{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.22em;text-transform:uppercase;color:var(--red);margin-bottom:18px;display:flex;align-items:center;gap:7px}
+.vc-steps{display:flex;align-items:center;overflow-x:auto;gap:0}
+.vc-step{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:100px;padding:0 6px;flex:1}
+.vc-node{width:40px;height:40px;border-radius:50%;border:1px solid var(--bdim);background:var(--surf2);display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:8px;position:relative;z-index:2}
+.vc-step.trigger .vc-node{border-color:var(--border);background:var(--red);box-shadow:0 0 18px rgba(232,25,44,.3)}
+.vc-nl{font-family:'Bebas Neue',cursive;font-size:.88rem;letter-spacing:.04em;color:var(--off-white);margin-bottom:3px;line-height:1.1}
+.vc-nd{font-family:'Space Mono',monospace;font-size:.5rem;letter-spacing:.08em;color:var(--muted);line-height:1.5}
+.vc-arr{flex-shrink:0;width:32px;height:1px;background:rgba(232,25,44,.25);align-self:center;margin-top:-18px;position:relative}
+.vc-arr::after{content:'';position:absolute;right:-4px;top:-3px;border:4px solid transparent;border-left:5px solid rgba(232,25,44,.35)}
+
+/* not-built note */
+.vc-note{margin-top:16px;font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:center;padding:12px;border:1px solid var(--bdim);border-radius:2px;display:flex;align-items:center;justify-content:center;gap:10px}
+.vc-nd2{width:5px;height:5px;border-radius:50%;background:var(--red);opacity:.4}
+
+/* voice commands list */
+.cmd-list{background:var(--surf);border:1px solid var(--bdim);border-radius:2px;overflow:hidden;margin-top:1.5px}
+.cmd-hd{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);padding:14px 18px;border-bottom:1px solid var(--bdim)}
+.cmd-row{padding:10px 18px;border-bottom:1px solid var(--bdim);display:flex;gap:12px;align-items:center}
+.cmd-row:last-child{border-bottom:none}
+.cmd-phrase{font-family:'Space Mono',monospace;font-size:.6rem;color:var(--red);border:1px solid var(--border);padding:3px 8px;border-radius:2px;flex-shrink:0}
+.cmd-action{font-size:.8rem;font-weight:300;color:rgba(245,240,235,.6)}
+
+/* ════════════════════════════════════════════════
+   SETTINGS
+════════════════════════════════════════════════ */
+#view-settings{flex-direction:column;overflow-y:auto}
+.st-wrap{max-width:560px;margin:0 auto;padding:36px 28px;width:100%}
+.st-title{font-family:'Bebas Neue',cursive;font-size:2rem;letter-spacing:.05em;margin-bottom:5px}
+.st-sub{font-size:.82rem;color:var(--muted);margin-bottom:28px}
+.sg-label{font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.sg-card{background:var(--surf);border:1px solid var(--bdim);border-radius:2px;overflow:hidden;margin-bottom:20px}
+.sg-row{padding:15px 18px;border-bottom:1px solid var(--bdim);display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .2s}
+.sg-row:last-child{border-bottom:none}
+.sg-row:hover{background:rgba(255,255,255,.02)}
+.sg-ic{font-size:16px;flex-shrink:0}
+.sg-info{flex:1}
+.sg-l{font-size:.85rem;font-weight:500;color:var(--off-white)}
+.sg-v{font-family:'Space Mono',monospace;font-size:.58rem;color:var(--muted);margin-top:2px}
+.toggle{width:36px;height:20px;border-radius:10px;background:var(--red);position:relative;cursor:pointer;flex-shrink:0}
+.toggle::after{content:'';position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.toggle.off{background:var(--mid)}
+.toggle.off::after{right:auto;left:2px}
+.sg-chip{font-family:'Space Mono',monospace;font-size:.52rem;letter-spacing:.1em;text-transform:uppercase;color:var(--red);border:1px solid var(--border);padding:3px 7px;border-radius:2px}
+.about-card{background:var(--surf);border:1px solid var(--bdim);border-radius:2px;padding:22px;text-align:center}
+.about-logo{font-family:'Bebas Neue',cursive;font-size:1.8rem;letter-spacing:.12em;margin-bottom:4px}
+.about-logo span{color:var(--red)}
+.about-ver{font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.15em;color:var(--muted)}
+
+/* ════════════════════════════════════════════════
+   CALL MODAL
+════════════════════════════════════════════════ */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.85);
+  backdrop-filter:blur(14px);z-index:500;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.modal-bg.open{opacity:1;pointer-events:all}
+
+.call-modal{
+  background:var(--surf);border:1px solid rgba(255,255,255,.07);border-radius:2px;
+  width:440px;text-align:center;padding:48px 40px;
+  position:relative;overflow:hidden;
+}
+/* logo-inspired header gradient on modal */
+.call-modal::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 85% 55% at 50% 0%,rgba(45,8,8,.9) 0%,transparent 65%);
+  pointer-events:none;
+}
+.cm-ey{
+  font-family:'Space Mono',monospace;font-size:.58rem;letter-spacing:.25em;text-transform:uppercase;
+  color:var(--red);margin-bottom:12px;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  position:relative;z-index:2;
+}
+.cm-num{
+  font-family:'Bebas Neue',cursive;font-size:7rem;color:var(--off-white);
+  line-height:1;letter-spacing:.05em;
+  text-shadow:0 0 50px rgba(232,25,44,.2);margin-bottom:12px;
+  position:relative;z-index:2;
+}
+.cm-loc{font-size:.88rem;color:var(--muted);margin-bottom:32px;line-height:1.65;position:relative;z-index:2}
+.cm-loc strong{color:var(--off-white)}
+.cm-btns{display:flex;gap:14px;justify-content:center;position:relative;z-index:2}
+.cm-btn{width:66px;height:66px;border-radius:50%;border:none;cursor:pointer;font-size:24px;transition:all .2s}
+.cm-btn.go{background:#28CA41;box-shadow:0 4px 22px rgba(40,202,65,.4);animation:goPulse 2s infinite}
+.cm-btn.go:hover{background:#22aa37;transform:scale(1.06)}
+.cm-btn.no{background:var(--surf2);border:1px solid var(--bdim);color:var(--off-white)}
+.cm-btn.no:hover{background:var(--surf3)}
+@keyframes goPulse{0%,100%{box-shadow:0 4px 22px rgba(40,202,65,.4)}50%{box-shadow:0 4px 36px rgba(40,202,65,.7),0 0 0 10px rgba(40,202,65,.08)}}
+
+/* voice cmd toast */
+.cmd-toast{
+  position:fixed;top:64px;left:50%;transform:translateX(-50%);
+  background:rgba(232,25,44,.95);color:white;
+  font-family:'Space Mono',monospace;font-size:.62rem;letter-spacing:.15em;text-transform:uppercase;
+  padding:6px 16px;border-radius:2px;z-index:600;
+  opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap;
+}
+.cmd-toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- CALL MODAL -->
+<div class="modal-bg" id="modal">
+  <div class="call-modal">
+    <div class="cm-ey"><div class="live-dot"></div>Connecting to Emergency Services</div>
+    <div class="cm-num">911</div>
+    <div class="cm-loc">United States Emergency Services<br><strong id="modal-city">New York, NY · Auto-detected</strong></div>
+    <div class="cm-btns">
+      <button class="cm-btn no" onclick="closeModal()">✕</button>
+      <button class="cm-btn go" onclick="confirmCall()">📞</button>
+    </div>
+  </div>
+</div>
+
+<!-- voice command toast -->
+<div class="cmd-toast" id="cmd-toast"></div>
+
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <nav class="sidebar">
+    <!-- Logo: actual image from mockup -->
+    <div class="logo-mark" onclick="goView('map')" title="AID-I">
+      <img src="data:image/png;base64,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" style="width:38px;height:auto;border-radius:2px;object-fit:contain;" alt="AID-I"/>
+    </div>
+
+    <div class="nav-group">
+      <div class="ni active" id="ni-map"      onclick="goView('map')"      >🗺️<span class="ni-tip">Emergency Map</span></div>
+      <div class="ni"        id="ni-aed"      onclick="goView('aed')"      >⚡<span class="ni-tip">AED Guide</span></div>
+      <div class="ni"        id="ni-recorder" onclick="goView('recorder')" >🎙️<span class="ni-tip">AI Recorder</span></div>
+      <div class="ni"        id="ni-report"   onclick="goView('report')"   >📋<span class="ni-tip">Protocol Report</span></div>
+      <div class="ni"        id="ni-voice"    onclick="goView('voice')"    >🔊<span class="ni-tip">Voice Commands</span></div>
+    </div>
+
+    <div class="nav-bot">
+      <div class="ni" id="ni-settings" onclick="goView('settings')">⚙️<span class="ni-tip">Settings</span></div>
+      <button class="btn-911" onclick="openModal()" title="Call 911">📞</button>
+    </div>
+  </nav>
+
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <span class="tb-title" id="tb-title">Emergency Map</span>
+      <div class="live-badge"><div class="live-dot"></div>Live · GPS Active</div>
+      <!-- voice command indicator -->
+      <div class="vc-indicator" id="vc-ind" title="Voice commands active — say 'show map', 'AED guide', 'start recording', 'show report'">
+        <div class="vc-dot" id="vc-dot"></div>Voice Commands
+      </div>
+      <div class="tb-spacer"></div>
+      <button class="btn-primary" id="tb-cta" onclick="openModal()">📞 &nbsp;Call 911</button>
+    </div>
+
+    <!-- ════ MAP ════ -->
+    <div class="view active" id="view-map">
+      <div id="map"></div>
+      <div class="map-panel">
+        <div class="panel-hd">
+          <div class="panel-title">Nearby Resources</div>
+          <div class="panel-sub" id="panel-sub">Loading…</div>
+        </div>
+        <div class="filter-row">
+          <div class="ftag on" data-t="hospital" style="color:#E8192C;border-color:rgba(232,25,44,.4)" onclick="toggleFilter(this)"><div class="ftag-dot" style="background:#E8192C"></div>Hospital</div>
+          <div class="ftag on" data-t="aed"      style="color:#FFB800;border-color:rgba(255,184,0,.4)"  onclick="toggleFilter(this)"><div class="ftag-dot" style="background:#FFB800"></div>AED</div>
+          <div class="ftag on" data-t="fire"     style="color:#FF6B35;border-color:rgba(255,107,53,.4)" onclick="toggleFilter(this)"><div class="ftag-dot" style="background:#FF6B35"></div>Fire</div>
+          <div class="ftag on" data-t="police"   style="color:#4DA6FF;border-color:rgba(77,166,255,.4)"  onclick="toggleFilter(this)"><div class="ftag-dot" style="background:#4DA6FF"></div>Police</div>
+        </div>
+        <div class="res-list" id="res-list"></div>
+        <div class="loc-bar">
+          <span style="font-size:12px">📍</span>
+          <span class="loc-text"><strong id="loc-city">Detecting…</strong> · Auto-detected</span>
+          <div class="live-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ AED ════ -->
+    <div class="view" id="view-aed">
+      <div class="aed-sidebar" id="aed-sidebar">
+        <div class="aed-sb-hd">AED Steps</div>
+      </div>
+      <div class="aed-main">
+        <div class="aed-prog"><div class="aed-prog-fill" id="aed-fill" style="width:14.28%"></div></div>
+        <div class="aed-body">
+          <div class="step-ey" id="aed-ey">Step 1 of 7</div>
+          <div class="aed-em" id="aed-em">📞</div>
+          <div class="aed-title" id="aed-title">CALL FOR HELP</div>
+          <p class="aed-desc" id="aed-desc">If you haven't already, call emergency services now. The red button in the sidebar connects you immediately.</p>
+          <div class="voice-hint"><div class="live-dot"></div>Say "next" or "previous" to navigate</div>
+        </div>
+        <div class="aed-foot">
+          <button class="btn-secondary" id="aed-prev" disabled onclick="aedGo(-1)">← Prev</button>
+          <button class="btn-primary" id="aed-next" style="flex:1;justify-content:center" onclick="aedGo(1)">Next Step →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ RECORDER ════ -->
+    <div class="view" id="view-recorder">
+      <div class="rec-left">
+        <div class="wave-wrap" id="wv"></div>
+        <div class="rec-timer" id="rec-timer">0:00</div>
+        <div class="rec-sub" id="rec-sub">READY TO RECORD</div>
+        <div class="mic-warn" id="mic-warn">Microphone access denied — please allow in browser settings</div>
+        <div class="rec-btns">
+          <button class="rb sec" id="pause-btn" onclick="pauseRec()" title="Pause">⏸</button>
+          <button class="rb main" id="main-rec" onclick="toggleRec()" title="Record">⏺</button>
+          <button class="rb sec" onclick="goView('report')" title="View Report">📋</button>
+        </div>
+        <div class="gen-card" onclick="goView('report')">
+          <span class="gen-ic">✦</span>
+          <div class="gen-b">
+            <div class="gen-t">Generate Protocol Report</div>
+            <div class="gen-s">Structures transcript → AMIST + ABCDE</div>
+          </div>
+          <span class="gen-ar">›</span>
+        </div>
+      </div>
+
+      <div class="tp">
+        <div class="tp-hd">
+          <div class="tp-title">Live Transcript</div>
+          <div class="tp-status"><div class="live-dot" id="tp-dot" style="animation:none;opacity:.2"></div><span id="tp-st">Waiting for recording</span></div>
+        </div>
+        <div class="tp-scroll">
+          <div class="tp-text" id="tp-txt">Tap ⏺ to begin recording. Speak clearly about the incident — everything you say is transcribed in real time and structured into a clinical handoff report for paramedics.<span class="tp-cur" id="tp-cur" style="display:none"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ REPORT ════ -->
+    <div class="view" id="view-report">
+      <div class="rpt-scroll">
+        <div class="rpt-inner">
+          <div class="rpt-sum">
+            <div class="rpt-sum-lbl"><div class="live-dot"></div>AI Generated · Recording · <span id="rpt-loc">New York, NY</span></div>
+            <div class="rpt-sum-txt" id="rpt-summary">Begin a recording on the Recorder tab. Your spoken incident description will appear here as a structured AMIST + ABCDE protocol report for paramedics.</div>
+          </div>
+          <div class="rpt-grid">
+            <div class="rpt-card">
+              <div class="rpt-ch"><div class="rpt-badge">A</div><div><div class="rpt-ct">AMIST Protocol</div><div class="rpt-cs">Age · Mechanism · Injuries · Signs · Treatment</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">A</div><div class="rpt-c"><div class="rpt-l">Age &amp; Allergies</div><div class="rpt-v" id="r-amist-a">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">M</div><div class="rpt-c"><div class="rpt-l">Mechanism / Medications</div><div class="rpt-v" id="r-amist-m">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">I</div><div class="rpt-c"><div class="rpt-l">Injuries / Illness</div><div class="rpt-v" id="r-amist-i">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">S</div><div class="rpt-c"><div class="rpt-l">Signs &amp; Symptoms</div><div class="rpt-v" id="r-amist-s">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">T</div><div class="rpt-c"><div class="rpt-l">Treatment Given</div><div class="rpt-v" id="r-amist-t">—</div></div></div>
+            </div>
+            <div class="rpt-card">
+              <div class="rpt-ch"><div class="rpt-badge">B</div><div><div class="rpt-ct">ABCDE Assessment</div><div class="rpt-cs">Airway · Breathing · Circulation · Disability · Exposure</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">A</div><div class="rpt-c"><div class="rpt-l">Airway</div><div class="rpt-v" id="r-ab-a">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">B</div><div class="rpt-c"><div class="rpt-l">Breathing</div><div class="rpt-v" id="r-ab-b">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">C</div><div class="rpt-c"><div class="rpt-l">Circulation</div><div class="rpt-v" id="r-ab-c">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">D</div><div class="rpt-c"><div class="rpt-l">Disability</div><div class="rpt-v" id="r-ab-d">—</div></div></div>
+              <div class="rpt-row"><div class="rpt-k">E</div><div class="rpt-c"><div class="rpt-l">Exposure</div><div class="rpt-v" id="r-ab-e">—</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="rpt-act">
+        <div class="rpt-al">Actions</div>
+        <button class="rpt-ab red">↑ Export PDF</button>
+        <button class="rpt-ab">📋 Copy Text</button>
+        <button class="rpt-ab">📱 Share to Paramedics</button>
+        <div class="rpt-div"></div>
+        <div class="rpt-al">Details</div>
+        <div class="rpt-meta" id="rpt-meta">No recording yet.<br>Record on the Recorder tab.</div>
+        <div class="rpt-div"></div>
+        <button class="rpt-ab" onclick="goView('recorder')">+ New Recording</button>
+      </div>
+    </div>
+
+    <!-- ════ VOICE CONCEPT ════ -->
+    <div class="view" id="view-voice" style="display:none;flex-direction:column;overflow-y:auto;background:var(--charcoal)">
+      <div class="vc-wrap">
+
+        <div class="vc-header">
+          <div class="vc-ey">Concept Scoped · Not Yet Built</div>
+          <div class="vc-h-title">Voice Control<br><span>via ElevenLabs</span></div>
+          <p class="vc-h-body">Hands-free emergency guidance. AID-I listens while you help — it transcribes what you say to 911 for the protocol, and responds to navigation commands to control the app without touching the screen.</p>
+        </div>
+
+        <div class="vc-principle">
+          <strong>Core Principle — No AI Responses to You</strong>
+          ElevenLabs is NOT a chatbot in AID-I. You are talking to 911, not the app. The app only listens passively to build the protocol report. Voice commands navigate the interface only — the app never interrupts, never speaks back, never competes with your real emergency conversation.
+        </div>
+
+        <!-- Voice commands reference -->
+        <div class="cmd-list" style="margin-bottom:1.5px">
+          <div class="cmd-hd">Live Voice Commands (Active Now)</div>
+          <div class="cmd-row"><div class="cmd-phrase">"show map"</div><div class="cmd-action">Navigate to the Emergency Map</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"AED guide"</div><div class="cmd-action">Open step-by-step AED guidance</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"start recording"</div><div class="cmd-action">Open recorder and begin transcription</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"show report"</div><div class="cmd-action">Open the protocol report</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"call 911"</div><div class="cmd-action">Open the emergency call dialog</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"next" / "previous"</div><div class="cmd-action">Advance or go back in AED guide steps</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"find AED"</div><div class="cmd-action">Go to map and highlight nearest AED</div></div>
+          <div class="cmd-row"><div class="cmd-phrase">"find hospital"</div><div class="cmd-action">Go to map and highlight nearest hospital</div></div>
+        </div>
+
+        <div class="vc-grid">
+          <div class="vc-card">
+            <div class="vc-cn">01 — ElevenLabs</div>
+            <div class="vc-ct">Optional TTS Cues</div>
+            <p class="vc-cb">ElevenLabs would only be used for subtle, non-intrusive audio cues — a brief confirmation tone or single word like "Recording" when a voice command is recognized. Never a response that talks over your 911 call.</p>
+            <div class="vc-tags"><span class="vc-tag">TTS Cues Only</span><span class="vc-tag">Non-Intrusive</span></div>
+          </div>
+          <div class="vc-card">
+            <div class="vc-cn">02 — Passive Listening</div>
+            <div class="vc-ct">Always Recording Protocol</div>
+            <p class="vc-cb">The recorder passively transcribes everything spoken — your description to 911, observations, bystander info. It never responds or interrupts. The transcript builds silently in the background.</p>
+            <div class="vc-tags"><span class="vc-tag">Web Speech API</span><span class="vc-tag">Continuous</span><span class="vc-tag">Silent</span></div>
+          </div>
+          <div class="vc-card">
+            <div class="vc-cn">03 — Navigation Commands</div>
+            <div class="vc-ct">Hands-Free Control</div>
+            <p class="vc-cb">Short, distinct phrases navigate the app silently. "AED guide" opens guidance, "show map" returns to map, "next" advances steps. No response needed — the screen just moves. Say it once, it happens.</p>
+            <div class="vc-tags"><span class="vc-tag">App Navigation</span><span class="vc-tag">No Response</span><span class="vc-tag">Instant</span></div>
+          </div>
+        </div>
+
+        <div class="vc-flow">
+          <div class="vc-flow-hd"><div class="live-dot"></div>How It Works in a Real Emergency</div>
+          <div class="vc-steps">
+            <div class="vc-step trigger"><div class="vc-node">📞</div><div class="vc-nl">Press 911</div><div class="vc-nd">Voice mode activates automatically</div></div>
+            <div class="vc-arr"></div>
+            <div class="vc-step"><div class="vc-node">🎙️</div><div class="vc-nl">You Talk to 911</div><div class="vc-nd">App listens silently, transcribes</div></div>
+            <div class="vc-arr"></div>
+            <div class="vc-step"><div class="vc-node">🗣️</div><div class="vc-nl">Say "AED guide"</div><div class="vc-nd">App navigates, no interruption</div></div>
+            <div class="vc-arr"></div>
+            <div class="vc-step"><div class="vc-node">📋</div><div class="vc-nl">Protocol Builds</div><div class="vc-nd">AMIST/ABCDE auto-populated from transcript</div></div>
+            <div class="vc-arr"></div>
+            <div class="vc-step"><div class="vc-node">🚑</div><div class="vc-nl">Paramedics Arrive</div><div class="vc-nd">Report ready — show screen, done</div></div>
+          </div>
+        </div>
+
+        <div class="vc-note">
+          <div class="vc-nd2"></div>
+          ElevenLabs API key required for TTS cues · Web Speech API needs HTTPS · Commands active in prototype now
+          <div class="vc-nd2"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════ SETTINGS ════ -->
+    <div class="view" id="view-settings" style="display:none;flex-direction:column;overflow-y:auto">
+      <div class="st-wrap">
+        <div class="st-title">Settings</div>
+        <div class="st-sub">Configure AID-I for your environment</div>
+
+        <div class="sg-label">Emergency</div>
+        <div class="sg-card">
+          <div class="sg-row"><span class="sg-ic">📞</span><div class="sg-info"><div class="sg-l">Emergency Number</div><div class="sg-v">911 · Auto-detected (US)</div></div><div class="sg-chip">AUTO</div></div>
+          <div class="sg-row"><span class="sg-ic">⚡</span><div class="sg-info"><div class="sg-l">AED Search Radius</div><div class="sg-v">2 km from current location</div></div><div style="font-family:'Space Mono',monospace;font-size:.55rem;color:var(--muted);border:1px solid var(--bdim);padding:3px 7px;border-radius:2px">2 KM ›</div></div>
+        </div>
+
+        <div class="sg-label">AI Recorder</div>
+        <div class="sg-card">
+          <div class="sg-row"><span class="sg-ic">🎙️</span><div class="sg-info"><div class="sg-l">Auto-start on 911 Call</div><div class="sg-v">Recorder activates when call is confirmed</div></div><div class="toggle"></div></div>
+          <div class="sg-row"><span class="sg-ic">📋</span><div class="sg-info"><div class="sg-l">Protocol Format</div><div class="sg-v">AMIST + ABCDE (Standard)</div></div><div style="font-family:'Space Mono',monospace;font-size:.55rem;color:var(--muted);border:1px solid var(--bdim);padding:3px 7px;border-radius:2px">EDIT ›</div></div>
+          <div class="sg-row"><span class="sg-ic">🔒</span><div class="sg-info"><div class="sg-l">Store Reports Locally</div><div class="sg-v">Device-only, never uploaded</div></div><div class="toggle"></div></div>
+        </div>
+
+        <div class="sg-label">Voice Control</div>
+        <div class="sg-card">
+          <div class="sg-row"><span class="sg-ic">🎤</span><div class="sg-info"><div class="sg-l">Voice Commands</div><div class="sg-v">Active — say "AED guide", "show map", "call 911"</div></div><div class="toggle"></div></div>
+          <div class="sg-row"><span class="sg-ic">🔊</span><div class="sg-info"><div class="sg-l">ElevenLabs TTS Cues</div><div class="sg-v">Concept only · not yet implemented</div></div><div class="toggle off"></div></div>
+        </div>
+
+        <div class="about-card">
+          <div class="about-logo">AID<span>-I</span></div>
+          <div class="about-ver">VERSION 1.0.0 · AI FIRST AID COMPANION</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════
+   VIEW ROUTER
+═══════════════════════════════════════════ */
+const VIEW_META = {
+  map:      'Emergency Map',
+  aed:      'AED Step-by-Step Guide',
+  recorder: 'AI Recorder',
+  report:   'Protocol Report',
+  voice:    'Voice Control · ElevenLabs Concept',
+  settings: 'Settings',
+};
+
+function goView(key) {
+  document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.style.display = 'none'; v.style.flexDirection = '' });
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  const el = document.getElementById('view-' + key);
+  el.style.display = 'flex'; el.classList.add('active');
+  const ni = document.getElementById('ni-' + key); if(ni) ni.classList.add('active');
+  document.getElementById('tb-title').textContent = VIEW_META[key] || key;
+  // show 911 btn only on map/aed
+  document.getElementById('tb-cta').style.display = ['map','aed','recorder'].includes(key) ? '' : 'none';
+  if (key === 'map' && !mapReady) initMap();
+  else if (key === 'map' && map) setTimeout(() => map.invalidateSize(), 50);
+}
+
+/* ═══════════════════════════════════════════
+   LEAFLET MAP — CartoDB Dark Matter
+═══════════════════════════════════════════ */
+let mapReady = false, map;
+let activeFilters = new Set(['hospital','aed','fire','police']);
+let selIdx = -1;
+
+const RESOURCES = [
+  { type:'aed',     color:'#FFB800', icon:'⚡', name:'AED — Grand Central Lobby',      lat:40.7527, lng:-73.9772, dist:'0.1 mi', walk:'2 min' },
+  { type:'hospital',color:'#E8192C', icon:'🏥', name:'Bellevue Hospital Center',        lat:40.7392, lng:-73.9765, dist:'0.4 mi', walk:'8 min' },
+  { type:'aed',     color:'#FFB800', icon:'⚡', name:'AED — Times Sq Station (42nd)',   lat:40.7557, lng:-73.9876, dist:'0.5 mi', walk:'10 min' },
+  { type:'police',  color:'#4DA6FF', icon:'🚔', name:'Midtown North Precinct (18th)',   lat:40.7606, lng:-73.9896, dist:'0.6 mi', walk:'12 min' },
+  { type:'fire',    color:'#FF6B35', icon:'🚒', name:'FDNY Engine Co. 65',              lat:40.7614, lng:-73.9837, dist:'0.7 mi', walk:'14 min' },
+  { type:'hospital',color:'#E8192C', icon:'🏥', name:'Lenox Hill Hospital ER',          lat:40.7700, lng:-73.9560, dist:'1.1 mi', walk:'22 min' },
+];
+
+function makePinIcon(r) {
+  // concentric circle dot style from mockup — no bubble, just ring+dot
+  const pulse = (r.type === 'aed' || r.type === 'hospital') ?
+    `<div class="mp-pulse" style="color:${r.color}"></div>` : '';
+  return L.divIcon({
+    className: '',
+    html: `<div class="mp-wrap" style="color:${r.color}">
+      ${pulse}
+      <div class="mp-outer"><div class="mp-inner"></div></div>
+    </div>`,
+    iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -16]
+  });
+}
+
+function makeUserIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative"><div class="user-loc"></div></div>`,
+    iconSize: [12, 12], iconAnchor: [6, 6]
+  });
+}
+
+function initMap() {
+  mapReady = true;
+  const center = [40.7520, -73.9772];
+  map = L.map('map', { center, zoom: 15, zoomControl: true, attributionControl: false });
+
+  // CartoDB Dark Matter — best match to mockup palette
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, subdomains: 'abcd'
+  }).addTo(map);
+
+  // User marker
+  L.marker(center, { icon: makeUserIcon(), zIndexOffset: 1000 }).addTo(map)
+   .bindPopup('<span style="font-family:\'Space Mono\',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:#E8192C">You are here</span>');
+
+  // Resource markers
+  RESOURCES.forEach((r, i) => {
+    r._marker = L.marker([r.lat, r.lng], { icon: makePinIcon(r) }).addTo(map);
+    r._marker.bindPopup(buildPopupHTML(r, i));
+    r._marker.on('click', () => selectRes(i));
+  });
+
+  buildList();
+  tryGPS();
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+function buildPopupHTML(r, i) {
+  return `<div style="font-family:'DM Sans',sans-serif;min-width:160px">
+    <div style="font-size:.83rem;font-weight:500;color:#F5F0EB;margin-bottom:4px">${r.name}</div>
+    <div style="font-family:'Space Mono',monospace;font-size:.58rem;color:#7A7A7A;margin-bottom:${r.type==='aed'?'10':'0'}px">${r.dist} · ${r.walk} walk</div>
+    ${r.type==='aed'?`<div onclick="goView('aed')" style="background:#E8192C;color:white;font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;padding:6px 9px;border-radius:2px;cursor:pointer;text-align:center;margin-bottom:5px">⚡ Start AED Guide</div>`:''}
+    <div onclick="window.open('https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}')" style="font-family:'Space Mono',monospace;font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:#4DA6FF;cursor:pointer">↗ Navigate</div>
+  </div>`;
+}
+
+function buildList() {
+  const list = document.getElementById('res-list');
+  const visible = RESOURCES.filter(r => activeFilters.has(r.type));
+  document.getElementById('panel-sub').textContent = `${visible.length} found · sorted by distance`;
+  list.innerHTML = RESOURCES.map((r, i) => `
+    <div class="res-card ${!activeFilters.has(r.type)?'hidden':''}" id="rc${i}" onclick="selectRes(${i})">
+      <div class="res-icon" style="background:${r.color}1a">${r.icon}</div>
+      <div class="res-body">
+        <div class="res-name">${r.name}</div>
+        <div class="res-meta">
+          <span class="res-dist">${r.dist} · ${r.walk} walk</span>
+          <span class="res-tag" style="color:${r.color};border-color:${r.color}44">${r.type.toUpperCase()}</span>
+        </div>
+        <div id="rca${i}" style="display:none" class="res-btns">
+          <button class="res-btn" onclick="event.stopPropagation();window.open('https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}')">↗ Navigate</button>
+          ${r.type==='aed'?`<button class="res-btn red" onclick="event.stopPropagation();goView('aed')">⚡ AED Guide</button>`:''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function selectRes(i) {
+  if (selIdx >= 0) {
+    document.getElementById('rc'+selIdx)?.classList.remove('sel');
+    const a = document.getElementById('rca'+selIdx); if(a) a.style.display = 'none';
+  }
+  selIdx = i;
+  const card = document.getElementById('rc'+i);
+  if (card) { card.classList.add('sel'); card.scrollIntoView({ behavior:'smooth', block:'nearest' }) }
+  const btns = document.getElementById('rca'+i); if(btns) btns.style.display = 'flex';
+  if (map) map.flyTo([RESOURCES[i].lat, RESOURCES[i].lng], 16, { duration: 0.8 });
+}
+
+function highlightType(type) {
+  const idx = RESOURCES.findIndex(r => r.type === type);
+  if (idx >= 0) { goView('map'); setTimeout(() => selectRes(idx), 300) }
+}
+
+function toggleFilter(el) {
+  const t = el.dataset.t;
+  if (activeFilters.has(t)) { activeFilters.delete(t); el.classList.remove('on') }
+  else { activeFilters.add(t); el.classList.add('on') }
+  RESOURCES.forEach(r => {
+    if (!r._marker || !map) return;
+    if (activeFilters.has(r.type)) r._marker.addTo(map); else map.removeLayer(r._marker);
+  });
+  buildList();
+}
+
+function tryGPS() {
+  if (!navigator.geolocation) { document.getElementById('loc-city').textContent = 'New York, NY'; return }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude: lat, longitude: lng } = pos.coords;
+    if (map) map.flyTo([lat, lng], 15, { duration: 1.2 });
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`)
+      .then(r => r.json())
+      .then(d => {
+        const c = d.address.city || d.address.town || d.address.suburb || 'Your Location';
+        const s = d.address.state_code || '';
+        const city = c + (s ? ', ' + s : '');
+        document.getElementById('loc-city').textContent = city;
+        document.getElementById('modal-city').textContent = city + ' · Auto-detected';
+        document.getElementById('rpt-loc').textContent = city;
+      }).catch(() => { document.getElementById('loc-city').textContent = 'New York, NY' });
+  }, () => { document.getElementById('loc-city').textContent = 'New York, NY' });
+}
+
+/* ═══════════════════════════════════════════
+   AED GUIDE
+═══════════════════════════════════════════ */
+const STEPS = [
+  { em:'📞', t:'CALL FOR HELP',    b:"If you haven't already, call emergency services now. The red 911 button in the sidebar connects you immediately." },
+  { em:'🧍', t:'CHECK THE PERSON', b:"Check if the person is conscious and breathing. Tap their shoulders firmly and shout 'Are you okay?'" },
+  { em:'⚡', t:'GET THE AED',      b:"Retrieve the AED from the location shown on your map. It is usually a yellow or green box mounted on a wall." },
+  { em:'🔋', t:'POWER ON',         b:"Press the ON button. The AED will speak to you — follow its audio and visual instructions exactly." },
+  { em:'🩺', t:'ATTACH THE PADS',  b:"Expose the chest. One pad below the right collarbone, one below the left armpit — as shown on the AED diagram." },
+  { em:'⚠️', t:'CLEAR AND SHOCK', b:"Ensure nobody is touching the person. Press the SHOCK button when the AED tells you to." },
+  { em:'❤️', t:'BEGIN CPR',        b:"After the shock, immediately start CPR: 30 chest compressions then 2 rescue breaths. Continue until paramedics arrive." },
+];
+let aedIdx = 0;
+
+function buildAedSidebar() {
+  const sb = document.getElementById('aed-sidebar');
+  STEPS.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'aed-si' + (i===0?' active':'');
+    el.id = 'asi'+i;
+    el.innerHTML = `<div class="aed-si-n">${String(i+1).padStart(2,'0')}</div><div class="aed-si-l">${s.t}</div>`;
+    el.onclick = () => setAedStep(i);
+    sb.appendChild(el);
+  });
+}
+buildAedSidebar();
+
+function setAedStep(i) {
+  aedIdx = i;
+  const s = STEPS[i], tot = STEPS.length;
+  document.getElementById('aed-ey').textContent = `Step ${i+1} of ${tot}`;
+  const em = document.getElementById('aed-em');
+  em.style.animation = 'none';
+  requestAnimationFrame(() => { em.textContent = s.em; em.style.animation = 'epop .4s cubic-bezier(.34,1.56,.64,1)' });
+  document.getElementById('aed-title').textContent = s.t;
+  document.getElementById('aed-desc').textContent = s.b;
+  document.getElementById('aed-fill').style.width = `${((i+1)/tot)*100}%`;
+  document.getElementById('aed-prev').disabled = i === 0;
+  const nx = document.getElementById('aed-next');
+  if (i === tot-1) { nx.textContent = '✓ Guide Complete'; nx.style.background = '#28CA41'; nx.style.boxShadow = '0 4px 18px rgba(40,202,65,.3)' }
+  else { nx.textContent = 'Next Step →'; nx.style.background = ''; nx.style.boxShadow = '' }
+  document.querySelectorAll('.aed-si').forEach((el,j) => {
+    el.classList.toggle('active', j===i);
+    el.classList.toggle('done', j<i);
+  });
+}
+
+function aedGo(dir) {
+  const n = aedIdx + dir;
+  if (n < 0) return;
+  if (n >= STEPS.length) { goView('map'); return }
+  setAedStep(n);
+}
+
+/* ═══════════════════════════════════════════
+   RECORDER — real Web Speech API
+   Passive transcription — no AI response
+═══════════════════════════════════════════ */
+let isRec = false, isPaused = false;
+let recSecs = 0, timerInt;
+let recognition = null, transcript = '';
+
+// Waveform
+const wv = document.getElementById('wv');
+for (let i = 0; i < 52; i++) { const b = document.createElement('div'); b.className = 'wb'; b.style.height='4px'; wv.appendChild(b) }
+setInterval(() => {
+  document.querySelectorAll('.wb').forEach(b => {
+    b.style.height = (isRec && !isPaused ? Math.random()*56+4 : 4) + 'px';
+  });
+}, 100);
+
+function mkRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.continuous = true; r.interimResults = true; r.lang = 'en-US';
+  r.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) transcript += e.results[i][0].transcript + ' ';
+      else interim += e.results[i][0].transcript;
+    }
+    const full = transcript + interim;
+    document.getElementById('tp-txt').innerHTML = full + '<span class="tp-cur"></span>';
+    document.getElementById('tp-txt').parentElement.scrollTop = 9999;
+    // check for navigation commands in what's said
+    checkVoiceCommands(full.toLowerCase());
+  };
+  r.onerror = e => {
+    if (e.error === 'not-allowed') { document.getElementById('mic-warn').style.display = 'block' }
+  };
+  r.onend = () => { if (isRec && !isPaused) { try { r.start() } catch(e){} } };
+  return r;
+}
+
+function startRec() {
+  isRec = true; isPaused = false; recSecs = 0; transcript = '';
+  document.getElementById('rec-timer').textContent = '0:00';
+  document.getElementById('rec-sub').textContent = 'RECORDING';
+  document.getElementById('tp-txt').innerHTML = '<span class="tp-cur"></span>';
+  document.getElementById('tp-dot').style.animation = ''; document.getElementById('tp-dot').style.opacity = '';
+  document.getElementById('tp-st').textContent = 'Transcribing live';
+  document.getElementById('main-rec').classList.add('on');
+  document.getElementById('main-rec').textContent = '⏹';
+  document.getElementById('mic-warn').style.display = 'none';
+  timerInt = setInterval(() => {
+    recSecs++;
+    const m = Math.floor(recSecs/60), s = recSecs%60;
+    document.getElementById('rec-timer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  }, 1000);
+  recognition = mkRecognition();
+  if (recognition) { try { recognition.start() } catch(e){} }
+  else {
+    document.getElementById('tp-txt').innerHTML =
+      '<em style="color:var(--muted);font-size:.8rem">Web Speech API not supported in this browser. Use Chrome or Edge for live transcription.</em>';
+  }
+}
+
+function stopRec() {
+  isRec = false; clearInterval(timerInt);
+  if (recognition) { try { recognition.stop() } catch(e){} }
+  document.getElementById('rec-sub').textContent = 'RECORDING COMPLETE';
+  document.getElementById('tp-dot').style.animation = 'none'; document.getElementById('tp-dot').style.opacity = '.2';
+  document.getElementById('tp-st').textContent = 'Recording complete';
+  document.getElementById('main-rec').classList.remove('on');
+  document.getElementById('main-rec').textContent = '⏺';
+  // populate report with transcript
+  populateReport();
+}
+
+function toggleRec() { isRec ? stopRec() : startRec() }
+
+function pauseRec() {
+  if (!isRec) return;
+  isPaused = !isPaused;
+  document.getElementById('pause-btn').textContent = isPaused ? '▶' : '⏸';
+  document.getElementById('rec-sub').textContent = isPaused ? 'PAUSED' : 'RECORDING';
+  if (isPaused) { clearInterval(timerInt); try { recognition && recognition.stop() } catch(e){} }
+  else {
+    timerInt = setInterval(() => { recSecs++; const m=Math.floor(recSecs/60),s=recSecs%60; document.getElementById('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}` }, 1000);
+    try { recognition && recognition.start() } catch(e){}
+  }
+}
+
+/* ═══════════════════════════════════════════
+   REPORT — populate from transcript
+═══════════════════════════════════════════ */
+function populateReport() {
+  const t = transcript.toLowerCase();
+  const m = Math.floor(recSecs/60), s = recSecs%60;
+  const duration = `${m}:${s.toString().padStart(2,'0')}`;
+  const city = document.getElementById('loc-city').textContent;
+
+  // Simple keyword extraction — in production this is GPT-4o
+  const age = t.match(/(\d+)\s*year[s]?\s*old/)?.[0] || t.match(/(male|female|man|woman|child|elderly)/)?.[0] || 'Not reported';
+  const mech = t.match(/(fell|collapsed|unconscious|seizure|chest pain|bleeding|crash|hit|stabbed|shot|choked)/)?.[0] || 'Not reported';
+  const injury = t.match(/(breathing|not breathing|responsive|unresponsive|pulse|no pulse|bleeding|fracture|burn|wound)/)?.[0] || 'Not reported';
+  const signs = t.match(/(pale|cyanotic|sweating|confused|conscious|unconscious|awake)/)?.[0] || 'Not reported';
+  const treatment = t.match(/(cpr|aed|bandage|compress|tourniquet|rescue breath|defibrillat|shock)/)?.[0] || 'Not reported';
+
+  const airway = t.includes('breathing') ? 'See breathing notes' : 'Status unclear from report';
+  const breathing = t.match(/(breathing|not breathing|breaths|respiration)/)?.[0] || 'Not reported';
+  const circ = t.match(/(pulse|bleeding|cpr|compressions)/)?.[0] || 'Not reported';
+  const disability = t.match(/(conscious|unconscious|responsive|unresponsive|alert|confused|gcs)/)?.[0] || 'Not reported';
+  const exposure = t.match(/(visible|exposed|wound|fracture|burn|bleeding|injury)/)?.[0] || 'Not reported';
+
+  document.getElementById('r-amist-a').textContent = age;
+  document.getElementById('r-amist-m').textContent = mech;
+  document.getElementById('r-amist-i').textContent = injury;
+  document.getElementById('r-amist-s').textContent = signs;
+  document.getElementById('r-amist-t').textContent = treatment;
+  document.getElementById('r-ab-a').textContent = airway;
+  document.getElementById('r-ab-b').textContent = breathing;
+  document.getElementById('r-ab-c').textContent = circ;
+  document.getElementById('r-ab-d').textContent = disability;
+  document.getElementById('r-ab-e').textContent = exposure;
+
+  document.getElementById('rpt-summary').textContent = transcript.trim() || 'No transcript captured.';
+  document.getElementById('rpt-meta').textContent = `Recorded: ${duration}\nLocation: ${city}\nProtocol: AMIST + ABCDE`;
+  document.getElementById('rpt-loc').textContent = city;
+}
+
+/* ═══════════════════════════════════════════
+   VOICE COMMANDS — always listening (separate from recorder)
+   Navigates app silently, no AI response
+═══════════════════════════════════════════ */
+let cmdRec = null;
+let lastCmdText = '';
+
+const COMMANDS = [
+  { phrases: ['show map','open map','go to map','find map'], action: () => goView('map') },
+  { phrases: ['aed guide','aed','show aed','open aed','start aed'], action: () => goView('aed') },
+  { phrases: ['start recording','record','open recorder','recorder'], action: () => { goView('recorder'); setTimeout(startRec, 400) } },
+  { phrases: ['show report','open report','protocol report','report'], action: () => goView('report') },
+  { phrases: ['call 911','call emergency','emergency call','nine one one'], action: () => openModal() },
+  { phrases: ['next','next step'], action: () => { if(document.getElementById('view-aed').classList.contains('active')) aedGo(1) } },
+  { phrases: ['previous','go back','prev','previous step'], action: () => { if(document.getElementById('view-aed').classList.contains('active')) aedGo(-1) } },
+  { phrases: ['find aed','nearest aed','where is aed'], action: () => highlightType('aed') },
+  { phrases: ['find hospital','nearest hospital','hospital'], action: () => highlightType('hospital') },
+  { phrases: ['settings'], action: () => goView('settings') },
+  { phrases: ['voice commands','voice control','voice'], action: () => goView('voice') },
+];
+
+function checkVoiceCommands(text) {
+  // Avoid re-triggering on same phrase
+  if (text === lastCmdText) return;
+  lastCmdText = text;
+  for (const cmd of COMMANDS) {
+    for (const phrase of cmd.phrases) {
+      if (text.includes(phrase)) {
+        showCmdToast(phrase);
+        cmd.action();
+        return;
+      }
+    }
+  }
+}
+
+function startCommandListener() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  cmdRec = new SR();
+  cmdRec.continuous = true; cmdRec.interimResults = true; cmdRec.lang = 'en-US';
+  cmdRec.onresult = e => {
+    let txt = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    checkVoiceCommands(txt.toLowerCase());
+  };
+  cmdRec.onerror = e => { if (e.error !== 'no-speech') console.log('cmd rec error:', e.error) };
+  cmdRec.onend = () => { try { cmdRec.start() } catch(e){} };
+  try {
+    cmdRec.start();
+    document.getElementById('vc-ind').classList.add('listening');
+    document.getElementById('vc-dot').style.animation = 'blink .8s infinite';
+  } catch(e) {}
+}
+
+function showCmdToast(phrase) {
+  const t = document.getElementById('cmd-toast');
+  t.textContent = `→ "${phrase}"`;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+/* ═══════════════════════════════════════════
+   CALL MODAL
+═══════════════════════════════════════════ */
+function openModal() { document.getElementById('modal').classList.add('open') }
+function closeModal() { document.getElementById('modal').classList.remove('open') }
+function confirmCall() {
+  closeModal();
+  goView('recorder');
+  setTimeout(startRec, 400);
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  setTimeout(initMap, 80);
+  // Start command listener after brief delay (let page settle)
+  setTimeout(startCommandListener, 1200);
+});
+</script>
+</body>
+</html>

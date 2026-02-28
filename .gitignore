@@ -21,3 +21,9 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code assistant files
+.claude/
+
+# Debug screenshots
+current.png
